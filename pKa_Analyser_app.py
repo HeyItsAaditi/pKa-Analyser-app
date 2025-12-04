@@ -6,60 +6,57 @@ import datetime
 import base64
 import io
 
-# Updated CSS:
-# White main background with a subtle light purple secondary background behind inputs/sections
-# Clean, light, and bright look - no dark colors
-
+# Updated CSS: White background, light colors, and colorful text/elements
 st.markdown("""
 <style>
-    /* Set the main background to white */
+    /* White main background */
     .main {
         background-color: #ffffff !important;
-        color: #222222;
+        color: #000000;  /* Black text for readability */
         padding: 1.5rem 1rem;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
-    /* For containers (sections) inside the app: light purple background with gentle rounding */
+    /* Light purple containers for sections */
     .block-container {
-        background: #ede7f6;  /* Very light purple */
+        background: #f3e5f5;  /* Very light purple */
         padding: 2rem;
         border-radius: 10px;
         box-shadow: 0 3px 12px rgba(100, 80, 180, 0.1);
         margin-bottom: 2rem;
     }
 
-    /* Title styling */
+    /* Title: Purple */
     h1 {
-        color: #5e35b1;  /* Medium purple */
+        color: #6a1b9a;  /* Purple */
         font-weight: 700;
         text-align: center;
         margin-bottom: 1rem;
     }
 
-    /* Section headers */
+    /* Section headers: Blue */
     h2, h3 {
-        color: #512da8;  /* Purple */
+        color: #1976d2;  /* Blue */
         margin-top: 1.5rem;
         margin-bottom: 0.7rem;
     }
 
-    /* Input boxes - crisp with subtle purple border and white background */
+    /* Input boxes: Light blue border, black text */
     .stTextInput>div>div>input,
     .stNumberInput>div>div>input,
     .stSelectbox>div>div>div[role="combobox"] {
         border-radius: 6px !important;
-        border: 2px solid #9575cd !important;  /* Soft purple border */
+        border: 2px solid #42a5f5 !important;  /* Light blue border */
         box-shadow: none !important;
         background-color: #ffffff !important;
         padding: 8px;
-        color: #222222;
+        color: #000000;  /* Black text */
         font-weight: 500;
     }
 
-    /* Buttons - pastel purple gradient */
+    /* Buttons: Purple gradient */
     .stButton>button, .stDownloadButton>button {
-        background: linear-gradient(45deg, #7e57c2, #ba68c8) !important; /* Purple pastel */
+        background: linear-gradient(45deg, #7e57c2, #ba68c8) !important; /* Purple */
         color: white !important;
         font-weight: 600;
         border-radius: 8px !important;
@@ -69,21 +66,22 @@ st.markdown("""
         transition: background 0.3s ease;
     }
     .stButton>button:hover, .stDownloadButton>button:hover {
-        background: linear-gradient(45deg, #673ab7, #9c27b0) !important; /* Darker purple hover */
+        background: linear-gradient(45deg, #5e35b1, #9c27b0) !important; /* Darker purple */
     }
 
-    /* Success and error messages */
+    /* Success messages: Green */
     .stSuccess {
         color: #388e3c !important; /* Green */
         font-weight: 600;
     }
 
+    /* Error messages: Red */
     .stError {
-        color: #e53935 !important; /* Red */
+        color: #d32f2f !important; /* Red */
         font-weight: 600;
     }
 
-    /* Tables - white bg with purple header */
+    /* Tables: White bg, blue borders, purple headers */
     table {
         border-collapse: collapse !important;
         width: 100% !important;
@@ -94,14 +92,19 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     th, td {
-        border: 1px solid #d1c4e9 !important;  /* Light purple border */
+        border: 1px solid #42a5f5 !important;  /* Blue border */
         padding: 10px !important;
         text-align: center !important;
-        color: #444444 !important;
+        color: #000000 !important;  /* Black text */
     }
     th {
-        background-color: #b39ddb !important; /* Medium light purple */
-        color: #2e2e2e !important;
+        background-color: #ba68c8 !important; /* Purple header */
+        color: #ffffff !important;  /* White text on purple */
+    }
+
+    /* Markdown text: Blue for bold/emphasis */
+    .stMarkdown strong {
+        color: #1976d2 !important;  /* Blue for bold text */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -279,7 +282,6 @@ if st.session_state.analysis_done:
         display_name = selected_standard
 
     diff = abs(std_pka - pKa)
-    # Updated accuracy calculation: 100 - (diff / pKa * 100) to match your expectation (e.g., for pKa=4.12, std=2.06, diff=2.06, 2.06/4.12≈0.5, so 100-50=50%)
     accuracy = max(0, 100 - (diff / pKa * 100)) if pKa != 0 else 0
     st.write(f"**Selected Standard:** {display_name}")
     st.write(f"**Standard pKa:** {std_pka:.2f}")
@@ -309,20 +311,20 @@ if st.session_state.analysis_done:
     html_content = f"""
     <html>
     <head><title>pKa Analysis Report</title></head>
-    <body style="background-color:#ede7f6; font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif; color: #222;">
-        <h1 style="color:#5e35b1; text-align:center;">pKa Analysis of Cooling Fluids Report</h1>
+    <body style="background-color:#f3e5f5; font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif; color: #000;">
+        <h1 style="color:#6a1b9a; text-align:center;">pKa Analysis of Cooling Fluids Report</h1>
         <div style="max-width:800px; margin:auto; background:#fff; padding:20px; border-radius:12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.05);">
-            <h2>Details</h2>
+            <h2 style="color:#1976d2;">Details</h2>
             <ul>
                 {"".join(f"<li>{key}: {value}</li>" for key, value in details.items())}
             </ul>
-            <h2>Input Data</h2>
+            <h2 style="color:#1976d2;">Input Data</h2>
             {data_html}
-            <h2>Results</h2>
+            <h2 style="color:#1976d2;">Results</h2>
             <p>Equivalence Point Volume: {V_eq:.2f} mL</p>
             <p>Half-Equivalence Volume: {V_half:.2f} mL</p>
             <p>pKa: {pKa:.2f}</p>
-            <h2>Graphs</h2>
+            <h2 style="color:#1976d2;">Graphs</h2>
             <h3>Derivative Curve</h3>
             <img src="data:image/png;base64,{img1_base64}" alt="Derivative Curve" style="max-width:100%;">
             <h3>Titration Curve</h3>
@@ -339,4 +341,3 @@ if st.session_state.analysis_done:
         file_name="pka_analysis_report.html",
         mime="text/html"
     )
-
