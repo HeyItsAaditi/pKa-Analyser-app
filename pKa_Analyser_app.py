@@ -46,7 +46,7 @@ st.markdown("""
     .stNumberInput>div>div>input,
     .stSelectbox>div>div>div[role="combobox"] {
         border-radius: 6px !important;
-        border: 2px solid #42a5f5 !important;  /* Light blue border */
+        border: 2px solid #602882 !important;  /* purple border */
         box-shadow: none !important;
         background-color: #ffffff !important;
         padding: 8px;
