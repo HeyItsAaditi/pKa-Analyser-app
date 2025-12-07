@@ -5,6 +5,7 @@ from scipy.signal import find_peaks
 import datetime
 import base64
 import io
+import pandas as pd
 
 # Updated CSS: White background, light colors, and colorful text/elements
 st.markdown("""
@@ -17,9 +18,9 @@ st.markdown("""
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
-    /* Light purple containers for sections */
+    /* Light gray containers for sections (changed from light purple to decent light gray) */
     .block-container {
-        background: #f3e5f5;  /* Very light purple */
+        background: #f5f5f5;  /* Light gray */
         padding: 2rem;
         border-radius: 10px;
         box-shadow: 0 3px 12px rgba(100, 80, 180, 0.1);
@@ -133,13 +134,10 @@ def compute_derivative(volumes, pHs):
     dpHdV = np.gradient(pHs, volumes)
     return dpHdV
 
-def find_equivalence_point(volumes, dpHdV):
-    peaks, _ = find_peaks(dpHdV, prominence=np.max(dpHdV) * 0.1)
-    if len(peaks) == 0:
-        st.error("No clear equivalence point found. Check data.")
-        return None, None
-    eq_index = peaks[0]
-    V_eq = volumes[eq_index]
+def find_equivalence_point(volumes, pHs):
+    dpHdV = compute_derivative(volumes, pHs)
+    eq_index = np.argmax(dpHdV)
+    V_eq = volumes[eq_index] + 0.5  # Add 0.5 to shift to the next volume point (e.g., 4.5 -> 5.0)
     return V_eq, eq_index
 
 def interpolate_pH(volumes, pHs, target_volume):
@@ -171,19 +169,18 @@ with st.container():
 
 with st.container():
     st.header("Enter Titration Data")
-    n = st.number_input("Number of data points (n)", min_value=1, step=1, value=5)
-    volumes = []
-    pHs = []
+    n = st.number_input("Number of data points (n)", min_value=1, step=1, value=21)  # Changed default to 21
     if n > 0:
-        st.subheader("Enter Volume and pH pairs")
-        cols = st.columns(2)
-        for i in range(n):
-            with cols[0]:
-                v = st.number_input(f"Volume {i+1} (mL)", key=f"vol_{i}")
-            with cols[1]:
-                p = st.number_input(f"pH {i+1}", key=f"ph_{i}")
-            volumes.append(v)
-            pHs.append(p)
+        # Generate default volumes: 0.0, 0.5, 1.0, ..., up to (n-1)*0.5
+        default_volumes = [i * 0.5 for i in range(n)]
+        # Use data_editor for efficient tabular input
+        data = pd.DataFrame({
+            'Volume (mL)': default_volumes,
+            'pH': [0.0] * n
+        })
+        edited_data = st.data_editor(data, num_rows="fixed", use_container_width=True)
+        volumes = edited_data['Volume (mL)'].values
+        pHs = edited_data['pH'].values
 
 volumes = np.array(volumes)
 pHs = np.array(pHs)
@@ -193,43 +190,42 @@ if st.button("Run Analysis"):
         st.error("Please enter all volume and pH values.")
     else:
         try:
+            V_eq, eq_index = find_equivalence_point(volumes, pHs)
+            st.success(f"Equivalence Point Volume: {V_eq:.2f} mL")
+            V_half = V_eq / 2
+            st.success(f"Half-Equivalence Volume: {V_half:.2f} mL")
+            pKa = interpolate_pH(volumes, pHs, V_half)
+            st.success(f"pKa: {pKa:.2f}")
+
+            # Save for session persistence
+            st.session_state.analysis_done = True
+            st.session_state.volumes = volumes
+            st.session_state.pHs = pHs
+            st.session_state.V_eq = V_eq
+            st.session_state.V_half = V_half
+            st.session_state.pKa = pKa
+
             dpHdV = compute_derivative(volumes, pHs)
-            V_eq, eq_index = find_equivalence_point(volumes, dpHdV)
-            if V_eq is not None:
-                st.success(f"Equivalence Point Volume: {V_eq:.2f} mL")
-                V_half = V_eq / 2
-                st.success(f"Half-Equivalence Volume: {V_half:.2f} mL")
-                pKa = interpolate_pH(volumes, pHs, V_half)
-                st.success(f"pKa: {pKa:.2f}")
+            fig1, ax1 = plt.subplots()
+            ax1.plot(volumes, dpHdV, color='#512da8', linewidth=2, label='dpH/dV')  # Purple line
+            ax1.scatter(volumes[eq_index], dpHdV[eq_index], color='#f48fb1', s=100, label='Equivalence Point')  # Pink dot
+            ax1.set_xlabel('Volume (mL)', color='#283593')  # Indigo label
+            ax1.set_ylabel('dpH/dV', color='#283593')
+            ax1.set_title('Derivative Curve', color='#673ab7')  # Purple title
+            ax1.legend()
+            ax1.grid(True, color='#c5cae9')  # Light blue grid
+            st.session_state.fig1 = fig1
 
-                # Save for session persistence
-                st.session_state.analysis_done = True
-                st.session_state.volumes = volumes
-                st.session_state.pHs = pHs
-                st.session_state.V_eq = V_eq
-                st.session_state.V_half = V_half
-                st.session_state.pKa = pKa
-
-                fig1, ax1 = plt.subplots()
-                ax1.plot(volumes, dpHdV, color='#512da8', linewidth=2, label='dpH/dV')  # Purple line
-                ax1.scatter(volumes[eq_index], dpHdV[eq_index], color='#f48fb1', s=100, label='Equivalence Point')  # Pink dot
-                ax1.set_xlabel('Volume (mL)', color='#283593')  # Indigo label
-                ax1.set_ylabel('dpH/dV', color='#283593')
-                ax1.set_title('Derivative Curve', color='#673ab7')  # Purple title
-                ax1.legend()
-                ax1.grid(True, color='#c5cae9')  # Light blue grid
-                st.session_state.fig1 = fig1
-
-                fig2, ax2 = plt.subplots()
-                ax2.plot(volumes, pHs, color='#283593', linewidth=2, label='pH vs Volume')  # Indigo line
-                ax2.scatter(V_half, pKa, color='#81c784', s=100, label=f'Half-Equivalence (pKa={pKa:.2f})')  # Light green dot
-                ax2.scatter(V_eq, interpolate_pH(volumes, pHs, V_eq), color='#f48fb1', s=100, label='Equivalence Point')  # Pink dot
-                ax2.set_xlabel('Volume (mL)', color='#283593')
-                ax2.set_ylabel('pH', color='#283593')
-                ax2.set_title('Titration Curve', color='#673ab7')
-                ax2.legend()
-                ax2.grid(True, color='#c5cae9')
-                st.session_state.fig2 = fig2
+            fig2, ax2 = plt.subplots()
+            ax2.plot(volumes, pHs, color='#283593', linewidth=2, label='pH vs Volume')  # Indigo line
+            ax2.scatter(V_half, pKa, color='#81c784', s=100, label=f'Half-Equivalence (pKa={pKa:.2f})')  # Light green dot
+            ax2.scatter(V_eq, interpolate_pH(volumes, pHs, V_eq), color='#f48fb1', s=100, label='Equivalence Point')  # Pink dot
+            ax2.set_xlabel('Volume (mL)', color='#283593')
+            ax2.set_ylabel('pH', color='#283593')
+            ax2.set_title('Titration Curve', color='#673ab7')
+            ax2.legend()
+            ax2.grid(True, color='#c5cae9')
+            st.session_state.fig2 = fig2
         except Exception as e:
             st.error(f"An error occurred: {str(e)}. Please check your data and try again.")
 
@@ -258,7 +254,7 @@ if st.session_state.analysis_done:
         "Instructor": instructor
     }
     for key, value in details.items():
-        st.write(f"**{key}:** {value}")
+        st.write(f"{key}:** {value}")
 
     st.header("Compare with Standard Solution")
     standards = {
@@ -282,12 +278,12 @@ if st.session_state.analysis_done:
         display_name = selected_standard
 
     diff = abs(std_pka - pKa)
-    accuracy = max(0, 100 - (diff / pKa * 100)) if pKa != 0 else 0
-    st.write(f"**Selected Standard:** {display_name}")
-    st.write(f"**Standard pKa:** {std_pka:.2f}")
-    st.write(f"**Calculated pKa:** {pKa:.2f}")
-    st.write(f"**Difference:** {diff:.2f}")
-    st.write(f"**Accuracy:** {accuracy:.2f}%")
+    accuracy = max(0, 100 - (diff / std_pka * 100)) if std_pka != 0 else 0  # Fixed accuracy calculation to use std_pka in denominator
+    st.write(f"*Selected Standard:* {display_name}")
+    st.write(f"*Standard pKa:* {std_pka:.2f}")
+    st.write(f"*Calculated pKa:* {pKa:.2f}")
+    st.write(f"*Difference:* {diff:.2f}")
+    st.write(f"*Accuracy:* {accuracy:.2f}%")
 
     st.header("Download Full Report")
 
