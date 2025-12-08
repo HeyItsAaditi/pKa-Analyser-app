@@ -134,9 +134,13 @@ def compute_derivative(volumes, pHs):
     return np.gradient(pHs, volumes)
 
 def find_equivalence_point(volumes, pHs):
-    dpHdV = compute_derivative(volumes, pHs)
-    eq_index = np.argmax(dpHdV)
-    V_eq = volumes[eq_index]  # Removed +0.5 to accurately capture the sudden increase
+    # Calculate the slopes between consecutive points
+    slopes = np.diff(pHs) / np.diff(volumes)
+    # Find the index of the maximum slope (sudden rise)
+    max_slope_idx = np.argmax(slopes)
+    # The equivalence point is at the volume where the pH starts to rise suddenly, i.e., the end of the interval with max slope
+    eq_index = max_slope_idx + 1
+    V_eq = volumes[eq_index]
     return V_eq, eq_index
 
 def interpolate_pH(volumes, pHs, target_volume):
