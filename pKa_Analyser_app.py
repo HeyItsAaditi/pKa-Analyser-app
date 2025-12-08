@@ -6,6 +6,9 @@ import datetime
 import base64
 import io
 import pandas as pd
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
 # Updated CSS: White background, light colors, and colorful text/elements
 st.markdown("""
@@ -110,7 +113,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialization of session state for persistence (same)
 if 'analysis_done' not in st.session_state:
     st.session_state.analysis_done = False
 if 'volumes' not in st.session_state:
@@ -128,16 +130,13 @@ if 'fig1' not in st.session_state:
 if 'fig2' not in st.session_state:
     st.session_state.fig2 = None
 
-
-# Functions as before
 def compute_derivative(volumes, pHs):
-    dpHdV = np.gradient(pHs, volumes)
-    return dpHdV
+    return np.gradient(pHs, volumes)
 
 def find_equivalence_point(volumes, pHs):
     dpHdV = compute_derivative(volumes, pHs)
     eq_index = np.argmax(dpHdV)
-    V_eq = volumes[eq_index] + 0.5  # Add 0.5 to shift to the next volume point (e.g., 4.5 -> 5.0)
+    V_eq = volumes[eq_index]  # Removed +0.5 to accurately capture the sudden increase
     return V_eq, eq_index
 
 def interpolate_pH(volumes, pHs, target_volume):
@@ -151,8 +150,70 @@ def plot_to_base64(fig):
     buf.close()
     return img_base64
 
+def plot_to_bytes(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png')
+    buf.seek(0)
+    return buf
 
-# App Content
+def generate_pdf(details, volumes, pHs, V_eq, V_half, pKa, fig1, fig2, comparison_text):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    # Page 1: Details
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(100, height - 100, "pKa Analysis of Cooling Fluids Report")
+    c.setFont("Helvetica", 12)
+    y = height - 150
+    for key, value in details.items():
+        c.drawString(100, y, f"{key}: {value}")
+        y -= 20
+    c.showPage()
+    # Page 2: Input Data
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(100, height - 100, "Input Data")
+    c.setFont("Helvetica", 12)
+    y = height - 150
+    c.drawString(100, y, "Volume (mL)")
+    c.drawString(200, y, "pH")
+    y -= 20
+    for v, p in zip(volumes, pHs):
+        c.drawString(100, y, f"{v:.2f}")
+        c.drawString(200, y, f"{p:.2f}")
+        y -= 20
+        if y < 100:
+            c.showPage()
+            y = height - 100
+    c.showPage()
+    # Page 3: Derivative Curve
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(100, height - 100, "Derivative Curve")
+    img1_buf = plot_to_bytes(fig1)
+    c.drawImage(ImageReader(img1_buf), 50, height - 400, width=400, height=300)
+    c.showPage()
+    # Page 4: Titration Curve
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(100, height - 100, "Titration Curve")
+    img2_buf = plot_to_bytes(fig2)
+    c.drawImage(ImageReader(img2_buf), 50, height - 400, width=400, height=300)
+    c.showPage()
+    # Page 5: Results + pKa Comparison
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(100, height - 100, "Results and pKa Comparison")
+    c.setFont("Helvetica", 12)
+    y = height - 150
+    c.drawString(100, y, f"Equivalence Point Volume: {V_eq:.2f} mL")
+    y -= 20
+    c.drawString(100, y, f"Half-Equivalence Volume: {V_half:.2f} mL")
+    y -= 20
+    c.drawString(100, y, f"pKa: {pKa:.2f}")
+    y -= 40
+    for line in comparison_text.strip().split('\n'):
+        c.drawString(100, y, line.strip())
+        y -= 20
+    c.save()
+    buffer.seek(0)
+    return buffer
 
 st.title("pKa Analysis of Cooling Fluids")
 
@@ -163,17 +224,16 @@ with st.container():
     division = st.text_input("Division")
     year = st.text_input("Year")
     course = st.text_input("Course")
+    program = st.text_input("Program")
+    branch = st.text_input("Branch")
     sample_name = st.text_input("Sample/Fluid Name")
-    instructor = st.text_input("Instructor")
     date = datetime.date.today().strftime("%Y-%m-%d")
 
 with st.container():
     st.header("Enter Titration Data")
-    n = st.number_input("Number of data points (n)", min_value=1, step=1, value=21)  # Changed default to 21
+    n = st.number_input("Number of data points (n)", min_value=1, step=1, value=21)
     if n > 0:
-        # Generate default volumes: 0.0, 0.5, 1.0, ..., up to (n-1)*0.5
         default_volumes = [i * 0.5 for i in range(n)]
-        # Use data_editor for efficient tabular input
         data = pd.DataFrame({
             'Volume (mL)': default_volumes,
             'pH': [0.0] * n
@@ -196,30 +256,26 @@ if st.button("Run Analysis"):
             st.success(f"Half-Equivalence Volume: {V_half:.2f} mL")
             pKa = interpolate_pH(volumes, pHs, V_half)
             st.success(f"pKa: {pKa:.2f}")
-
-            # Save for session persistence
             st.session_state.analysis_done = True
             st.session_state.volumes = volumes
             st.session_state.pHs = pHs
             st.session_state.V_eq = V_eq
             st.session_state.V_half = V_half
             st.session_state.pKa = pKa
-
             dpHdV = compute_derivative(volumes, pHs)
             fig1, ax1 = plt.subplots()
-            ax1.plot(volumes, dpHdV, color='#512da8', linewidth=2, label='dpH/dV')  # Purple line
-            ax1.scatter(volumes[eq_index], dpHdV[eq_index], color='#f48fb1', s=100, label='Equivalence Point')  # Pink dot
-            ax1.set_xlabel('Volume (mL)', color='#283593')  # Indigo label
+            ax1.plot(volumes, dpHdV, color='#512da8', linewidth=2, label='dpH/dV')
+            ax1.scatter(volumes[eq_index], dpHdV[eq_index], color='#f48fb1', s=100, label='Equivalence Point')
+            ax1.set_xlabel('Volume (mL)', color='#283593')
             ax1.set_ylabel('dpH/dV', color='#283593')
-            ax1.set_title('Derivative Curve', color='#673ab7')  # Purple title
+            ax1.set_title('Derivative Curve', color='#673ab7')
             ax1.legend()
-            ax1.grid(True, color='#c5cae9')  # Light blue grid
+            ax1.grid(True, color='#c5cae9')
             st.session_state.fig1 = fig1
-
             fig2, ax2 = plt.subplots()
-            ax2.plot(volumes, pHs, color='#283593', linewidth=2, label='pH vs Volume')  # Indigo line
-            ax2.scatter(V_half, pKa, color='#81c784', s=100, label=f'Half-Equivalence (pKa={pKa:.2f})')  # Light green dot
-            ax2.scatter(V_eq, interpolate_pH(volumes, pHs, V_eq), color='#f48fb1', s=100, label='Equivalence Point')  # Pink dot
+            ax2.plot(volumes, pHs, color='#283593', linewidth=2, label='pH vs Volume')
+            ax2.scatter(V_half, pKa, color='#81c784', s=100, label=f'Half-Equivalence (pKa={pKa:.2f})')
+            ax2.scatter(V_eq, interpolate_pH(volumes, pHs, V_eq), color='#f48fb1', s=100, label='Equivalence Point')
             ax2.set_xlabel('Volume (mL)', color='#283593')
             ax2.set_ylabel('pH', color='#283593')
             ax2.set_title('Titration Curve', color='#673ab7')
@@ -237,11 +293,9 @@ if st.session_state.analysis_done:
     pKa = st.session_state.pKa
     fig1 = st.session_state.fig1
     fig2 = st.session_state.fig2
-
     st.header("Graphs")
     st.pyplot(fig1)
     st.pyplot(fig2)
-
     st.header("Details")
     details = {
         "Student Name": student_name,
@@ -250,12 +304,12 @@ if st.session_state.analysis_done:
         "Year": year,
         "Date": date,
         "Course": course,
-        "Sample/Fluid Name": sample_name,
-        "Instructor": instructor
+        "Program": program,
+        "Branch": branch,
+        "Sample/Fluid Name": sample_name
     }
     for key, value in details.items():
         st.write(f"{key}:** {value}")
-
     st.header("Compare with Standard Solution")
     standards = {
         "Acetic Acid": 4.76,
@@ -267,7 +321,6 @@ if st.session_state.analysis_done:
         "Other (Enter Custom)": None
     }
     selected_standard = st.selectbox("Select a standard solution to compare:", list(standards.keys()))
-
     if selected_standard == "Other (Enter Custom)":
         custom_name = st.text_input("Enter custom acid name:", value="")
         custom_pka = st.number_input("Enter custom standard pKa value:", value=0.0)
@@ -276,64 +329,14 @@ if st.session_state.analysis_done:
     else:
         std_pka = standards[selected_standard]
         display_name = selected_standard
-
     diff = abs(std_pka - pKa)
-    accuracy = max(0, 100 - (diff / std_pka * 100)) if std_pka != 0 else 0  # Fixed accuracy calculation to use std_pka in denominator
+    accuracy = max(0, 100 - (diff / std_pka * 100)) if std_pka != 0 else 0
     st.write(f"*Selected Standard:* {display_name}")
     st.write(f"*Standard pKa:* {std_pka:.2f}")
     st.write(f"*Calculated pKa:* {pKa:.2f}")
     st.write(f"*Difference:* {diff:.2f}")
     st.write(f"*Accuracy:* {accuracy:.2f}%")
-
+    comparison_text = f"Selected Standard: {display_name}\nStandard pKa: {std_pka:.2f}\nCalculated pKa: {pKa:.2f}\nDifference: {diff:.2f}\nAccuracy: {accuracy:.2f}%"
     st.header("Download Full Report")
-
-    img1_base64 = plot_to_base64(fig1)
-    img2_base64 = plot_to_base64(fig2)
-
-    data_html = "<table border='1'><tr><th>Volume (mL)</th><th>pH</th></tr>"
-    for v, p in zip(volumes, pHs):
-        data_html += f"<tr><td>{v:.2f}</td><td>{p:.2f}</td></tr>"
-    data_html += "</table>"
-
-    comparison_html = f"""
-    <h3>pKa Comparison with Selected Standard</h3>
-    <p><strong>Selected Standard:</strong> {display_name}</p>
-    <p><strong>Standard pKa:</strong> {std_pka:.2f}</p>
-    <p><strong>Calculated pKa:</strong> {pKa:.2f}</p>
-    <p><strong>Difference:</strong> {diff:.2f}</p>
-    <p><strong>Accuracy:</strong> {accuracy:.2f}%</p>
-    """
-
-    html_content = f"""
-    <html>
-    <head><title>pKa Analysis Report</title></head>
-    <body style="background-color:#f3e5f5; font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif; color: #000;">
-        <h1 style="color:#6a1b9a; text-align:center;">pKa Analysis of Cooling Fluids Report</h1>
-        <div style="max-width:800px; margin:auto; background:#fff; padding:20px; border-radius:12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.05);">
-            <h2 style="color:#1976d2;">Details</h2>
-            <ul>
-                {"".join(f"<li>{key}: {value}</li>" for key, value in details.items())}
-            </ul>
-            <h2 style="color:#1976d2;">Input Data</h2>
-            {data_html}
-            <h2 style="color:#1976d2;">Results</h2>
-            <p>Equivalence Point Volume: {V_eq:.2f} mL</p>
-            <p>Half-Equivalence Volume: {V_half:.2f} mL</p>
-            <p>pKa: {pKa:.2f}</p>
-            <h2 style="color:#1976d2;">Graphs</h2>
-            <h3>Derivative Curve</h3>
-            <img src="data:image/png;base64,{img1_base64}" alt="Derivative Curve" style="max-width:100%;">
-            <h3>Titration Curve</h3>
-            <img src="data:image/png;base64,{img2_base64}" alt="Titration Curve" style="max-width:100%;">
-            {comparison_html}
-        </div>
-    </body>
-    </html>
-    """
-
-    st.download_button(
-        label="Download Full HTML Report",
-        data=html_content,
-        file_name="pka_analysis_report.html",
-        mime="text/html"
-    )
+    pdf_buffer = generate_pdf(details, volumes, pHs, V_eq, V_half, pKa, fig1, fig2, comparison_text)
+    st.download_button(label="Download Full PDF Report", data=pdf_buffer, file_name="pka_analysis_report.pdf", mime="application/pdf")
