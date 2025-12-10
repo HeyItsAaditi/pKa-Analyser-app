@@ -131,17 +131,20 @@ if 'fig2' not in st.session_state:
     st.session_state.fig2 = None
 
 def compute_derivative(volumes, pHs):
-    return np.gradient(pHs, volumes)
+    # Calculate change in pH divided by change in volume (0.5 for each step)
+    return np.diff(pHs) / np.diff(volumes)
 
 def find_equivalence_point(volumes, pHs):
-    # Calculate the slopes between consecutive points
-    slopes = np.diff(pHs) / np.diff(volumes)
-    # Find the index of the maximum slope (sudden rise)
-    max_slope_idx = np.argmax(slopes)
-    # The equivalence point is at the volume where the pH starts to rise suddenly, i.e., the end of the interval with max slope
-    eq_index = max_slope_idx + 1
-    V_eq = volumes[eq_index]
-    return V_eq, eq_index
+    dpHdV = compute_derivative(volumes, pHs)
+    peaks, _ = find_peaks(dpHdV, prominence=np.max(dpHdV) * 0.5)  # Higher prominence for sharper, fewer peaks
+    if len(peaks) == 0:
+        st.error("No clear equivalence point found. Check data.")
+        return None, None
+    # Select the peak with the maximum dpHdV value for a single sharp peak
+    max_peak_index = np.argmax(dpHdV[peaks])
+    eq_index = peaks[max_peak_index]
+    V_eq = volumes[eq_index + 1]  # Since dpHdV is at intervals, equivalence at end of interval
+    return V_eq, eq_index + 1
 
 def interpolate_pH(volumes, pHs, target_volume):
     return np.interp(target_volume, volumes, pHs)
@@ -173,35 +176,50 @@ def generate_pdf(details, volumes, pHs, V_eq, V_half, pKa, fig1, fig2, compariso
         c.drawString(100, y, f"{key}: {value}")
         y -= 20
     c.showPage()
-    # Page 2: Input Data
+    # Page 2: Input Data with Bordered Table
     c.setFont("Helvetica-Bold", 14)
     c.drawString(100, height - 100, "Input Data")
     c.setFont("Helvetica", 12)
     y = height - 150
+    # Table headers
     c.drawString(100, y, "Volume (mL)")
     c.drawString(200, y, "pH")
+    # Draw borders for headers
+    c.line(90, y-5, 90, y+15)  # Left vertical for Volume
+    c.line(90, y-5, 180, y-5)  # Bottom horizontal for Volume
+    c.line(180, y-5, 180, y+15)  # Right vertical for Volume
+    c.line(90, y+15, 180, y+15)  # Top horizontal for Volume
+    c.line(190, y-5, 190, y+15)  # Left vertical for pH
+    c.line(190, y-5, 280, y-5)  # Bottom horizontal for pH
+    c.line(280, y-5, 280, y+15)  # Right vertical for pH
+    c.line(190, y+15, 280, y+15)  # Top horizontal for pH
     y -= 20
     for v, p in zip(volumes, pHs):
         c.drawString(100, y, f"{v:.2f}")
         c.drawString(200, y, f"{p:.2f}")
+        # Draw borders for each row
+        c.line(90, y-5, 90, y+15)  # Left vertical for Volume
+        c.line(90, y-5, 180, y-5)  # Bottom horizontal for Volume
+        c.line(180, y-5, 180, y+15)  # Right vertical for Volume
+        c.line(90, y+15, 180, y+15)  # Top horizontal for Volume
+        c.line(190, y-5, 190, y+15)  # Left vertical for pH
+        c.line(190, y-5, 280, y-5)  # Bottom horizontal for pH
+        c.line(280, y-5, 280, y+15)  # Right vertical for pH
+        c.line(190, y+15, 280, y+15)  # Top horizontal for pH
         y -= 20
         if y < 100:
             c.showPage()
             y = height - 100
     c.showPage()
-    # Page 3: Derivative Curve
+    # Page 3: Both Graphs on One Page
     c.setFont("Helvetica-Bold", 14)
-    c.drawString(100, height - 100, "Derivative Curve")
+    c.drawString(100, height - 100, "Graphs")
     img1_buf = plot_to_bytes(fig1)
-    c.drawImage(ImageReader(img1_buf), 50, height - 400, width=400, height=300)
-    c.showPage()
-    # Page 4: Titration Curve
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(100, height - 100, "Titration Curve")
+    c.drawImage(ImageReader(img1_buf), 50, height - 300, width=300, height=200)  # Derivative Curve
     img2_buf = plot_to_bytes(fig2)
-    c.drawImage(ImageReader(img2_buf), 50, height - 400, width=400, height=300)
+    c.drawImage(ImageReader(img2_buf), 50, height - 550, width=300, height=200)  # Titration Curve below
     c.showPage()
-    # Page 5: Results + pKa Comparison
+    # Page 4: Results + pKa Comparison
     c.setFont("Helvetica-Bold", 14)
     c.drawString(100, height - 100, "Results and pKa Comparison")
     c.setFont("Helvetica", 12)
@@ -268,8 +286,8 @@ if st.button("Run Analysis"):
             st.session_state.pKa = pKa
             dpHdV = compute_derivative(volumes, pHs)
             fig1, ax1 = plt.subplots()
-            ax1.plot(volumes, dpHdV, color='#512da8', linewidth=2, label='dpH/dV')
-            ax1.scatter(volumes[eq_index], dpHdV[eq_index], color='#f48fb1', s=100, label='Equivalence Point')
+            ax1.plot(volumes[:-1], dpHdV, color='#512da8', linewidth=2, label='dpH/dV')  # Plot at volumes[:-1] for accurate x-axis
+            ax1.scatter(volumes[eq_index - 1], dpHdV[eq_index - 1], color='#f48fb1', s=100, label='Equivalence Point')  # Adjusted scatter
             ax1.set_xlabel('Volume (mL)', color='#283593')
             ax1.set_ylabel('dpH/dV', color='#283593')
             ax1.set_title('Derivative Curve', color='#673ab7')
@@ -316,6 +334,7 @@ if st.session_state.analysis_done:
         st.write(f"{key}:** {value}")
     st.header("Compare with Standard Solution")
     standards = {
+        "Benzoic Acid": 4.2,  # Added as default
         "Acetic Acid": 4.76,
         "Carbonic Acid (pKa1)": 6.35,
         "Phosphoric Acid (pKa1)": 2.15,
@@ -324,7 +343,7 @@ if st.session_state.analysis_done:
         "Sodium Hydroxide": 15.7,
         "Other (Enter Custom)": None
     }
-    selected_standard = st.selectbox("Select a standard solution to compare:", list(standards.keys()))
+    selected_standard = st.selectbox("Select a standard solution to compare:", list(standards.keys()), index=0)  # Default to Benzoic Acid
     if selected_standard == "Other (Enter Custom)":
         custom_name = st.text_input("Enter custom acid name:", value="")
         custom_pka = st.number_input("Enter custom standard pKa value:", value=0.0)
@@ -344,3 +363,4 @@ if st.session_state.analysis_done:
     st.header("Download Full Report")
     pdf_buffer = generate_pdf(details, volumes, pHs, V_eq, V_half, pKa, fig1, fig2, comparison_text)
     st.download_button(label="Download Full PDF Report", data=pdf_buffer, file_name="pka_analysis_report.pdf", mime="application/pdf")
+       
