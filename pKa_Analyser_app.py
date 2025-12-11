@@ -237,7 +237,7 @@ def generate_pdf(details, volumes, pHs, V_eq, V_half, pKa, fig1, fig2, compariso
     buffer.seek(0)
     return buffer
 
-st.title("pKa Analysis of Cooling Fluids")
+st.title("pKa determination using pH–volume data")
 
 with st.container():
     st.header("Enter Details")
