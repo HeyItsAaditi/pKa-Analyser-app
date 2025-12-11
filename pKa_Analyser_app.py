@@ -169,7 +169,7 @@ def generate_pdf(details, volumes, pHs, V_eq, V_half, pKa, fig1, fig2, compariso
     width, height = letter
     # Page 1: Details
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(100, height - 100, "pKa Analysis of Cooling Fluids Report")
+    c.drawString(100, height - 100, "Interpretation of pKa values of a cooling fluid Report")
     c.setFont("Helvetica", 12)
     y = height - 150
     for key, value in details.items():
