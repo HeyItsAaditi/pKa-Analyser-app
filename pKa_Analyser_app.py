@@ -286,8 +286,8 @@ if st.button("Run Analysis"):
             st.session_state.pKa = pKa
             dpHdV = compute_derivative(volumes, pHs)
             fig1, ax1 = plt.subplots()
-            ax1.plot(volumes[:-1], dpHdV, color='#512da8', linewidth=2, label='dpH/dV')  # Plot at volumes[:-1] for accurate x-axis
-            ax1.scatter(volumes[eq_index - 1], dpHdV[eq_index - 1], color='#f48fb1', s=100, label='Equivalence Point')  # Adjusted scatter
+            ax1.plot(volumes[1:], dpHdV, color='#512da8', linewidth=2, label='dpH/dV')  # Fixed: use volumes[1:] to match dpHdV length
+            ax1.scatter(V_eq, dpHdV[eq_index-1], color='#f48fb1', s=100, label='Equivalence Point')  # Fixed: plot at correct V_eq position
             ax1.set_xlabel('Volume (mL)', color='#283593')
             ax1.set_ylabel('dpH/dV', color='#283593')
             ax1.set_title('Derivative Curve', color='#673ab7')
@@ -363,4 +363,3 @@ if st.session_state.analysis_done:
     st.header("Download Full Report")
     pdf_buffer = generate_pdf(details, volumes, pHs, V_eq, V_half, pKa, fig1, fig2, comparison_text)
     st.download_button(label="Download Full PDF Report", data=pdf_buffer, file_name="pka_analysis_report.pdf", mime="application/pdf")
-       
